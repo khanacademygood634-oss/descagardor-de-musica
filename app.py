@@ -3,12 +3,11 @@ import sys
 import threading
 import time
 import re
+import json
 from pathlib import Path
 from flask import Flask, request, render_template, send_from_directory, jsonify
 from flask_sock import Sock
 import yt_dlp
-import pyperclip
-import json
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -115,44 +114,24 @@ def notify_clients(obj):
     for d in dead:
         clients.discard(d)
 
-def clipboard_watcher():
-    last = ""
-    global clipboard_monitor_enabled
-    while True:
-        time.sleep(1.5)
-        with clipboard_lock:
-            enabled = clipboard_monitor_enabled
-        if not enabled:
-            continue
-        try:
-            text = pyperclip.paste()
-        except Exception:
-            text = ""
-        if text and text != last and valid_youtube_url(text):
-            last = text
-            notify_clients({"type":"detected","url":text})
-            # perform download in a separate thread so watcher keeps running
-            def dl_and_notify(u):
-                notify_clients({"type":"status","message":"Descargando", "url": u})
-                res = download_audio(u)
-                if res.get("status") == "ok":
-                    notify_clients({"type":"done","file": os.path.basename(res.get("file")), "title": res.get("title")})
-                else:
-                    notify_clients({"type":"error","error": res.get("error")})
-            threading.Thread(target=dl_and_notify, args=(text,), daemon=True).start()
-
-# start watcher thread
-t = threading.Thread(target=clipboard_watcher, daemon=True)
-t.start()
+def process_clipboard_url(url: str):
+    """Procesa URL desde el portapapeles del navegador"""
+    if valid_youtube_url(url):
+        notify_clients({"type":"detected","url":url})
+        def dl_and_notify(u):
+            notify_clients({"type":"status","message":"Descargando", "url": u})
+            res = download_audio(u)
+            if res.get("status") == "ok":
+                notify_clients({"type":"done","file": os.path.basename(res.get("file")), "title": res.get("title")})
+            else:
+                notify_clients({"type":"error","error": res.get("error")})
+        threading.Thread(target=dl_and_notify, args=(url,), daemon=True).start()
 
 if __name__ == "__main__":
     # run local dev server (not for production)
     app.run(host="0.0.0.0", port=5000, debug=True)
 
 
-# Small endpoint to toggle monitor (called by frontend)
-
-from flask import request
 @app.route("/toggle_monitor", methods=["POST"])
 def toggle_monitor():
     global clipboard_monitor_enabled
@@ -161,3 +140,18 @@ def toggle_monitor():
     with clipboard_lock:
         clipboard_monitor_enabled = enabled
     return jsonify({"monitor": clipboard_monitor_enabled})
+
+@app.route("/check_clipboard_url", methods=["POST"])
+def check_clipboard_url():
+    """Endpoint para recibir URLs del portapapeles desde el navegador (Clipboard API)"""
+    global clipboard_monitor_enabled
+    data = request.get_json() or {}
+    url = data.get("url", "").strip()
+    
+    with clipboard_lock:
+        enabled = clipboard_monitor_enabled
+    
+    if enabled and url:
+        process_clipboard_url(url)
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "ignored"})

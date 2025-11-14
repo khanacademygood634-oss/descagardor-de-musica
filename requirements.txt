@@ -1,5 +1,4 @@
 Flask
 flask-sock
 yt-dlp
-pyperclip
 gunicorn

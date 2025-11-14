@@ -69,11 +69,62 @@
   setupWS();
 
   // Toggle monitor on server by toggling a request (server reads global flag via pyperclip polling)
-  monitorSwitch.addEventListener("change", ()=>{
+  monitorSwitch.addEventListener("change", async ()=>{
     const on = monitorSwitch.checked;
-    addLog("Modo Monitor " + (on ? "activado" : "desactivado") + " (local server)");
+    if(on){
+      // Solicitar permiso de portapapeles
+      try{
+        const permission = await navigator.permissions.query({name: "clipboard-read"});
+        if(permission.state === "denied"){
+          addLog("❌ Permiso de portapapeles denegado");
+          monitorSwitch.checked = false;
+          return;
+        }
+        if(permission.state === "prompt"){
+          addLog("📋 Solicita permiso para acceder al portapapeles...");
+        }
+      }catch(e){
+        addLog("⚠️ Permisos de portapapeles no soportados en este navegador");
+      }
+      addLog("✅ Modo Monitor activado");
+    } else {
+      addLog("❌ Modo Monitor desactivado");
+    }
+    
     // send a local POST to toggle the server side flag (server reads pyperclip globally).
     fetch("/toggle_monitor", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({enabled: on})})
       .catch(e => addLog("No se pudo cambiar modo monitor: " + e.message));
+    
+    // Si se activa el monitor, comenzar a monitorear portapapeles
+    if(on){
+      monitorClipboard();
+    }
   });
+  
+  // Monitorear portapapeles periódicamente
+  let lastClipboard = "";
+  async function monitorClipboard(){
+    if(!monitorSwitch.checked) return;
+    
+    try{
+      const text = await navigator.clipboard.readText();
+      if(text && text !== lastClipboard){
+        lastClipboard = text;
+        // Enviar URL al servidor
+        fetch("/check_clipboard_url", {
+          method:"POST", 
+          headers:{"Content-Type":"application/json"}, 
+          body: JSON.stringify({url: text})
+        }).catch(e => console.error(e));
+      }
+    }catch(e){
+      // Permiso denegado o API no disponible
+      if(e.name === "NotAllowedError"){
+        addLog("❌ Permiso de portapapeles denegado");
+        monitorSwitch.checked = false;
+      }
+    }
+    
+    setTimeout(monitorClipboard, 2000);
+  }
 })();
