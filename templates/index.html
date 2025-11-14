@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Descargador YouTube → MP3</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>🎵 Descargador YouTube → MP3</h1>
+    <p id="status">Esperando enlace…</p>
+
+    <div class="controls">
+      <input id="url" placeholder="Pega aquí el enlace de YouTube" />
+      <button id="btnDescargar">Descargar</button>
+    </div>
+
+    <label class="switch">
+      <input type="checkbox" id="monitorSwitch"/>
+      <span class="slider"></span>
+    </label>
+    <span>Modo Monitor (local)</span>
+
+    <div id="log" class="log"></div>
+  </main>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
