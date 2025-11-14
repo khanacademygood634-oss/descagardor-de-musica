@@ -37,6 +37,38 @@ YOUTUBE_REGEX = re.compile(r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+")
 def valid_youtube_url(url: str):
     return bool(YOUTUBE_REGEX.search(url))
 
+
+def get_cookies_file():
+    """Return a path to a cookies file if available.
+
+    Priority:
+      1. Environment var `YTDLP_COOKIES_CONTENT` (contents of cookies file)
+      2. Environment var `YTDLP_COOKIES` (path on filesystem)
+      3. ./cookies.txt in current working dir
+    """
+    # 1) content provided in env var (useful for Render secrets)
+    content = os.environ.get("YTDLP_COOKIES_CONTENT")
+    if content:
+        try:
+            target = os.path.join("/tmp", "ytdlp_cookies.txt")
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(content)
+            return target
+        except Exception:
+            return None
+
+    # 2) path provided
+    path = os.environ.get("YTDLP_COOKIES")
+    if path and os.path.exists(path):
+        return path
+
+    # 3) fallback ./cookies.txt
+    fallback = os.path.join(os.getcwd(), "cookies.txt")
+    if os.path.exists(fallback):
+        return fallback
+
+    return None
+
 def download_audio(url: str, output_dir=DOWNLOADS):
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -54,6 +86,10 @@ def download_audio(url: str, output_dir=DOWNLOADS):
         'quiet': True,
         'no_warnings': True,
     }
+    # Attach cookiefile if provided via environment or local file
+    cookie_file = get_cookies_file()
+    if cookie_file:
+        ydl_opts['cookiefile'] = cookie_file
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -61,7 +97,16 @@ def download_audio(url: str, output_dir=DOWNLOADS):
             base = os.path.splitext(filename)[0] + ".mp3"
             return {"status": "ok", "file": base, "title": info.get("title")}
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        msg = str(e)
+        # Detect common yt-dlp auth message and return actionable instructions
+        if "Sign in to confirm" in msg or "--cookies" in msg or "use --cookies" in msg:
+            help_text = (
+                "YouTube requires cookies to download this video. "
+                "Provide a cookies file via the environment variable `YTDLP_COOKIES` (path) "
+                "or `YTDLP_COOKIES_CONTENT` (file contents). See: https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp"
+            )
+            return {"status": "error", "error": help_text}
+        return {"status": "error", "error": msg}
 
 @app.route("/")
 def index():
