@@ -41,6 +41,11 @@ def download_audio(url: str, output_dir=DOWNLOADS):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
+        'socket_timeout': 30,
+        'extractor_args': {'youtube': {'player_client': ['ios']}},
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        },
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -53,7 +58,6 @@ def download_audio(url: str, output_dir=DOWNLOADS):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
-            # replace extension with .mp3 if postprocessing changed it
             base = os.path.splitext(filename)[0] + ".mp3"
             return {"status": "ok", "file": base, "title": info.get("title")}
     except Exception as e:
@@ -70,19 +74,17 @@ def descargar():
     if not url:
         return jsonify({"status":"error","error":"No URL provided"}), 400
     if not valid_youtube_url(url):
-        return jsonify({"status":"error","error":"URL no v√°lida de YouTube"}), 400
+        return jsonify({"status":"error","error":"URL no v·lida de YouTube"}), 400
     result = download_audio(url)
     return jsonify(result)
 
 @app.route("/archivo/<path:nombre>")
 def archivo(nombre):
-    # Send from downloads path (note: only for local use)
     try:
         return send_from_directory(DOWNLOADS, nombre, as_attachment=True)
     except Exception as e:
         return str(e), 404
 
-# WebSocket to notify frontend about clipboard-detected URLs and download events
 clients = set()
 
 @sock.route("/monitor_ws")
@@ -90,17 +92,19 @@ def monitor_ws(ws):
     clients.add(ws)
     try:
         while True:
-            msg = ws.receive()
-            # if frontend sends command to toggle monitor
-            if msg is None:
-                break
             try:
-                obj = json.loads(msg)
+                msg = ws.receive(timeout=5)
+                if msg is None:
+                    break
+                try:
+                    obj = json.loads(msg)
+                except Exception:
+                    continue
+                cmd = obj.get("cmd")
+                if cmd == "status":
+                    ws.send(json.dumps({"type":"status","monitor":clipboard_monitor_enabled}))
             except Exception:
-                continue
-            cmd = obj.get("cmd")
-            if cmd == "status":
-                ws.send(json.dumps({"type":"status","monitor":clipboard_monitor_enabled}))
+                break
     finally:
         clients.discard(ws)
 
@@ -128,9 +132,7 @@ def process_clipboard_url(url: str):
         threading.Thread(target=dl_and_notify, args=(url,), daemon=True).start()
 
 if __name__ == "__main__":
-    # run local dev server (not for production)
     app.run(host="0.0.0.0", port=5000, debug=True)
-
 
 @app.route("/toggle_monitor", methods=["POST"])
 def toggle_monitor():
