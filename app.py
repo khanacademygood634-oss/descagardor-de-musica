@@ -1,7 +1,6 @@
 import os
 import sys
 import threading
-import time
 import re
 import json
 from pathlib import Path
@@ -32,7 +31,7 @@ os.makedirs(DOWNLOADS, exist_ok=True)
 clipboard_monitor_enabled = False
 clipboard_lock = threading.Lock()
 
-YOUTUBE_REGEX = re.compile(r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+")
+YOUTUBE_REGEX = re.compile(r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/\S+" )
 
 def valid_youtube_url(url: str):
     return bool(YOUTUBE_REGEX.search(url))
@@ -66,6 +65,11 @@ def get_cookies_file():
     fallback = os.path.join(os.getcwd(), "cookies.txt")
     if os.path.exists(fallback):
         return fallback
+
+    # 4) temporary uploaded cookies (written by /upload_cookies endpoint)
+    tmp_fn = os.path.join("/tmp", "ytdlp_cookies.txt")
+    if os.path.exists(tmp_fn):
+        return tmp_fn
 
     return None
 
@@ -188,16 +192,40 @@ def toggle_monitor():
         clipboard_monitor_enabled = enabled
     return jsonify({"monitor": clipboard_monitor_enabled})
 
+
+@app.route('/upload_cookies', methods=['POST'])
+def upload_cookies():
+    """Upload cookies content to a temporary file for yt-dlp to use.
+
+    If the environment variable `YTDLP_UPLOAD_SECRET` is set, the request must
+    include JSON field `secret` matching that value. This prevents public abuse
+    when deployed.
+    """
+    secret_env = os.environ.get('YTDLP_UPLOAD_SECRET')
+    data = request.get_json() or {}
+    cookies = data.get('cookies', '')
+    provided = data.get('secret')
+    if secret_env:
+        if not provided or provided != secret_env:
+            return jsonify({'status': 'error', 'error': 'invalid secret'}), 403
+    if not cookies:
+        return jsonify({'status': 'error', 'error': 'no cookies provided'}), 400
+    try:
+        target = os.path.join('/tmp', 'ytdlp_cookies.txt')
+        with open(target, 'w', encoding='utf-8') as f:
+            f.write(cookies)
+        return jsonify({'status': 'ok', 'path': target})
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
 @app.route("/check_clipboard_url", methods=["POST"])
 def check_clipboard_url():
     """Endpoint para recibir URLs del portapapeles desde el navegador (Clipboard API)"""
     global clipboard_monitor_enabled
     data = request.get_json() or {}
     url = data.get("url", "").strip()
-    
     with clipboard_lock:
         enabled = clipboard_monitor_enabled
-    
     if enabled and url:
         process_clipboard_url(url)
         return jsonify({"status": "ok"})

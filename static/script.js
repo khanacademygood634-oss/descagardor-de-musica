@@ -127,4 +127,38 @@
     
     setTimeout(monitorClipboard, 2000);
   }
+
+  // Cookies UI: show/hide panel and upload cookies to server
+  const btnCookies = document.getElementById("btnCookies");
+  const cookiesPanel = document.getElementById("cookiesPanel");
+  const btnUploadCookies = document.getElementById("btnUploadCookies");
+  const cookiesText = document.getElementById("cookiesText");
+  const cookiesSecret = document.getElementById("cookiesSecret");
+
+  if(btnCookies){
+    btnCookies.addEventListener("click", ()=>{
+      if(!cookiesPanel) return;
+      cookiesPanel.style.display = (cookiesPanel.style.display === "none" || cookiesPanel.style.display === "") ? "block" : "none";
+    });
+  }
+
+  if(btnUploadCookies){
+    btnUploadCookies.addEventListener("click", async ()=>{
+      const cookies = cookiesText ? cookiesText.value.trim() : "";
+      const secret = cookiesSecret ? cookiesSecret.value.trim() : undefined;
+      if(!cookies){ addLog("Pega el contenido de cookies.txt antes de subir"); return; }
+      addLog("Subiendo cookies...");
+      try{
+        const res = await fetch("/upload_cookies", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({cookies, secret})});
+        const j = await res.json();
+        if(res.ok && j.status === "ok"){
+          addLog("Cookies subidas correctamente");
+        } else {
+          addLog("Error subiendo cookies: " + (j.error || res.statusText));
+        }
+      }catch(e){
+        addLog("Error de red al subir cookies: " + e.message);
+      }
+    });
+  }
 })();

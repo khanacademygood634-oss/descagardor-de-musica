@@ -22,6 +22,17 @@
     </label>
     <span>Modo Monitor (local)</span>
 
+    <div style="margin-top:8px">
+      <button id="btnCookies">Configuración de cookies</button>
+    </div>
+
+    <div id="cookiesPanel" style="display:none;margin-top:8px;">
+      <p>Si YouTube solicita iniciar sesión, exporta tus cookies y pégalas aquí (archivo <code>cookies.txt</code>).</p>
+      <textarea id="cookiesText" rows="6" style="width:100%;border-radius:8px;padding:8px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,0.06)"></textarea>
+      <input id="cookiesSecret" placeholder="Secret (si usas YTDLP_UPLOAD_SECRET)" style="width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit" />
+      <div style="margin-top:6px"><button id="btnUploadCookies">Subir cookies</button></div>
+    </div>
+
     <div id="log" class="log"></div>
   </main>
 
